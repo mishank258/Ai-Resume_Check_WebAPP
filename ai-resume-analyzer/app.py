@@ -99,12 +99,20 @@ ROLE_KEYWORDS = {
 
 # Adjacency — partial credit for related skills
 SKILL_ADJACENCY = {
-    # Tech
+    # Tech — framework adjacency
+    "nextjs":           {"react","javascript","typescript","node","html","css","vue","angular"},
+    "typescript":       {"javascript","react","node","nextjs","vue","angular","html"},
+    "react":            {"javascript","typescript","nextjs","html","css","vue"},
+    "vue":              {"javascript","typescript","html","css","react","node"},
+    "node":             {"javascript","typescript","rest","express","flask","python"},
+    "fullstack":        {"javascript","python","react","node","flask","django","nextjs","vue"},
     "containerization": {"docker","kubernetes","aws","gcp","azure","terraform","linux"},
     "distributed":      {"aws","gcp","azure","microservices","kafka","node","rest","grpc"},
     "microservices":    {"docker","kubernetes","aws","rest","node","flask","fastapi","grpc"},
     "kubernetes":       {"docker","aws","gcp","azure","containerization"},
     "mlops":            {"python","docker","kubernetes","tensorflow","pytorch"},
+    "openai":           {"python","llm","ai","rest","javascript","typescript"},
+    "llm":              {"python","ai","openai","rest","javascript","typescript"},
     # Healthcare
     "clinical assessment": {"patient care","triage","diagnosis","nursing"},
     "medication administration": {"dispensing","pharmacology","patient care","nursing"},
@@ -124,6 +132,10 @@ SYNONYMS = {
     "ms excel":"excel","microsoft excel":"excel","version control":"git",
     "node js":"node","javascript":"javascript","scrum":"agile",
     "kanban":"agile","agile methodology":"agile",
+    "next.js":"nextjs","next js":"nextjs","ts":"typescript",
+    "full stack":"fullstack","full-stack":"fullstack",
+    "openai api":"openai","gemini api":"llm","anthropic api":"llm",
+    "google gemini":"llm","chatgpt":"openai",
 }
 
 # Soft skill proxy words — detect soft skills from resume narrative
@@ -207,10 +219,34 @@ def extract_experience(text: str) -> int:
     return max(results, default=0)
 
 
+# Words that appear in JD marketing copy but are meaningless for matching
+_FLUFF_WORDS = {
+    "silicon","valley","founder","vision","leapfrog","leapfrogging","exceptional",
+    "builders","push","best","joining","journey","fast","meaningful","outcomes",
+    "catering","snacks","drinks","sports","activities","equipment","office",
+    "promotions","raises","merit","contributions","compensation","salary","per","year",
+    "lyra","fdm","swinburne","company","join","australia","global","network",
+    "exciting","opportunity","world","class","top","tier","startup","culture",
+    "proud","building","ship","shipped","real","products","embed","directly",
+    "executing","executing","visions","alongside","push","grow","growth",
+}
+
+def _strip_fluff(text: str) -> str:
+    """Remove marketing/culture words before TF-IDF so only technical content is compared."""
+    words = text.lower().split()
+    return " ".join(w for w in words if w not in _FLUFF_WORDS and len(w) > 2)
+
+
 def tfidf_score(text_a: str, text_b: str) -> float:
     try:
-        vecs = TfidfVectorizer(min_df=1, stop_words='english').fit_transform([text_a, text_b])
-        return float(cosine_similarity(vecs[0], vecs[1])[0][0])
+        # Strip fluff so TF-IDF compares technical content only
+        a = _strip_fluff(text_a)
+        b = _strip_fluff(text_b)
+        vecs = TfidfVectorizer(min_df=1, stop_words='english').fit_transform([a, b])
+        raw = float(cosine_similarity(vecs[0], vecs[1])[0][0])
+        # Scale up: TF-IDF between two short technical texts rarely exceeds 0.3
+        # A score of 0.15+ is actually a decent match — map to a 0-1 range realistically
+        return min(1.0, raw * 3.5)
     except Exception:
         return 0.0
 
