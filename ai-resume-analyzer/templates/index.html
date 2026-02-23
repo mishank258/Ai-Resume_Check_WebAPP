@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ResumeAI · Match Analyzer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #080c10;
+      --surface:   #0e1520;
+      --surface2:  #111c28;
+      --border:    #1c2d40;
+      --accent:    #00e5a0;
+      --accent2:   #00aaff;
+      --accent3:   #a78bfa;
+      --warn:      #ff4d6d;
+      --text:      #c8d8e8;
+      --muted:     #4a6070;
+      --heading:   #eaf4ff;
+      --mono:      'DM Mono', monospace;
+      --display:   'Syne', sans-serif;
+      --radius:    10px;
+      --glow:      0 0 20px rgba(0,229,160,.18);
+      --glow3:     0 0 20px rgba(167,139,250,.2);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 14px;
+      line-height: 1.7;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.07) 2px, rgba(0,0,0,.07) 4px);
+      pointer-events: none; z-index: 999;
+    }
+
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: .3; pointer-events: none; z-index: 0;
+    }
+
+    .wrap {
+      position: relative; z-index: 1;
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 52px 24px 80px;
+    }
+
+    /* ── Header ── */
+    header { margin-bottom: 44px; animation: fadeDown .6s ease both; }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--accent); border: 1px solid rgba(0,229,160,.3);
+      padding: 4px 12px; border-radius: 99px; margin-bottom: 16px;
+    }
+    .badge::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent); animation: pulse 1.8s ease-in-out infinite;
+    }
+
+    h1 { font-family: var(--display); font-size: clamp(28px, 4vw, 48px); font-weight: 800; color: var(--heading); line-height: 1.1; letter-spacing: -.02em; }
+    h1 em { font-style: normal; color: var(--accent); }
+    .sub { margin-top: 10px; color: var(--muted); font-size: 13px; max-width: 520px; }
+
+    /* ── Step flow indicator ── */
+    .flow {
+      display: flex; align-items: center; gap: 0;
+      margin-bottom: 28px; animation: fadeUp .5s .1s ease both;
+      overflow-x: auto; padding-bottom: 4px;
+    }
+    .flow-step {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--muted); white-space: nowrap;
+    }
+    .flow-step.active { color: var(--accent); }
+    .flow-num {
+      width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; flex-shrink: 0;
+    }
+    .flow-step.active .flow-num { background: var(--accent); color: #000; border-color: var(--accent); }
+    .flow-arrow { color: var(--border); margin: 0 12px; font-size: 16px; }
+
+    /* ── Main 3-column grid ── */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr 1fr;
+      gap: 0;
+      margin-bottom: 24px;
+      animation: fadeUp .6s .15s ease both;
+    }
+
+    @media (max-width: 900px) {
+      .main-grid { grid-template-columns: 1fr; }
+      .col-arrow { display: none; }
+    }
+
+    /* ── Column ── */
+    .col {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+
+    .col + .col { margin-left: 0; }
+
+    .col-arrow {
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 8px; color: var(--border); font-size: 22px; flex-shrink: 0;
+      margin-top: 48px; /* align with textarea */
+    }
+
+    /* Parser column accent */
+    .col.parser { border-color: rgba(167,139,250,.35); }
+    .col.resume-col { border-color: rgba(0,229,160,.2); }
+    .col.jd-col { border-color: rgba(0,170,255,.2); }
+
+    /* Column header */
+    .col-head {
+      padding: 14px 18px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px;
+    }
+
+    .col-label {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    }
+
+    .col-label .dot {
+      width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+    }
+    .parser   .dot { background: var(--accent3); }
+    .resume-col .dot { background: var(--accent); }
+    .jd-col   .dot { background: var(--accent2); }
+
+    .col-label span { color: var(--muted); }
+    .col.parser   .col-label span { color: var(--accent3); }
+    .col.resume-col .col-label span { color: var(--accent); }
+    .col.jd-col   .col-label span { color: var(--accent2); }
+
+    /* Parse button inside header */
+    .parse-btn {
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(167,139,250,.12); border: 1px solid rgba(167,139,250,.3);
+      color: var(--accent3); font-family: var(--mono); font-size: 11px;
+      letter-spacing: .06em; padding: 5px 12px; border-radius: 6px;
+      cursor: pointer; transition: background .2s, transform .15s;
+      white-space: nowrap;
+    }
+    .parse-btn:hover { background: rgba(167,139,250,.22); transform: translateY(-1px); }
+    .parse-btn:active { transform: none; }
+    .parse-btn svg { flex-shrink: 0; }
+
+    /* Textarea */
+    .col textarea {
+      flex: 1;
+      width: 100%; min-height: 220px;
+      background: transparent;
+      border: none; outline: none; resize: vertical;
+      color: var(--text); font-family: var(--mono); font-size: 12.5px;
+      line-height: 1.65; padding: 16px 18px;
+    }
+    .col textarea::placeholder { color: var(--muted); }
+
+    /* Extracted items panel */
+    .extracted-panel {
+      border-top: 1px solid var(--border);
+      padding: 12px 16px;
+      background: rgba(0,0,0,.2);
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .extracted-panel.visible { display: flex; }
+
+    .ext-section-title {
+      font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--accent3); margin-bottom: 4px;
+    }
+
+    .ext-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    .ext-chip {
+      font-size: 11px; padding: 3px 10px; border-radius: 5px;
+      font-family: var(--mono); letter-spacing: .04em; cursor: pointer;
+      transition: transform .1s, opacity .1s;
+      border: 1px solid transparent;
+    }
+    .ext-chip:hover { transform: translateY(-1px); opacity: .85; }
+    .ext-chip:active { transform: none; }
+    .ext-chip.skill-chip    { background: rgba(167,139,250,.12); border-color: rgba(167,139,250,.3); color: #c4b5fd; }
+    .ext-chip.role-chip     { background: rgba(0,170,255,.1);   border-color: rgba(0,170,255,.3);   color: #7dd3fc; }
+    .ext-chip.edu-chip      { background: rgba(0,229,160,.08);  border-color: rgba(0,229,160,.25);  color: #6ee7b7; }
+
+    .use-all-btn {
+      align-self: flex-start;
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(167,139,250,.15); border: 1px solid rgba(167,139,250,.4);
+      color: var(--accent3); font-family: var(--mono); font-size: 11px;
+      padding: 5px 12px; border-radius: 6px; cursor: pointer;
+      transition: background .2s; margin-top: 2px;
+    }
+    .use-all-btn:hover { background: rgba(167,139,250,.25); }
+
+    /* JD box filled indicator */
+    .fill-indicator {
+      font-size: 10px; letter-spacing: .06em;
+      color: var(--accent2); padding: 6px 18px 10px;
+      display: none;
+    }
+    .fill-indicator.visible { display: block; }
+
+    /* ── Analyze button ── */
+    .btn-row { display: flex; justify-content: center; animation: fadeUp .6s .25s ease both; }
+
+    .analyze-btn {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--accent); color: #000;
+      font-family: var(--mono); font-size: 14px; font-weight: 500;
+      letter-spacing: .06em; padding: 14px 40px;
+      border: none; border-radius: var(--radius); cursor: pointer;
+      transition: transform .15s, box-shadow .2s;
+      position: relative; overflow: hidden;
+    }
+    .analyze-btn::after { content: ''; position: absolute; inset: 0; background: white; opacity: 0; transition: opacity .15s; }
+    .analyze-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,229,160,.35); }
+    .analyze-btn:hover::after { opacity: .06; }
+    .analyze-btn:active { transform: translateY(0); }
+    .analyze-btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+    /* ── Loader ── */
+    #loader { display: none; text-align: center; padding: 36px 0; color: var(--muted); font-size: 13px; letter-spacing: .08em; }
+    .dots span { display: inline-block; animation: blink 1.2s infinite; color: var(--accent); }
+    .dots span:nth-child(2) { animation-delay: .2s; }
+    .dots span:nth-child(3) { animation-delay: .4s; }
+
+    /* ── Output ── */
+    #output { display: none; }
+
+    .score-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 28px 32px; margin-top: 32px;
+      display: flex; align-items: center; gap: 36px; flex-wrap: wrap;
+      animation: fadeUp .5s ease both;
+    }
+
+    .score-dial { position: relative; width: 120px; height: 120px; flex-shrink: 0; }
+    .score-dial svg { width: 120px; height: 120px; transform: rotate(-90deg); }
+    .score-dial circle { fill: none; stroke-width: 8; stroke-linecap: round; }
+    .dial-bg   { stroke: var(--border); }
+    .dial-fill { stroke: var(--accent); stroke-dasharray: 0 314; transition: stroke-dasharray 1.2s cubic-bezier(.4,0,.2,1); }
+
+    .score-num { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .score-num strong { font-family: var(--display); font-size: 28px; font-weight: 800; color: var(--heading); }
+    .score-num small { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+
+    .score-meta { flex: 1; min-width: 200px; }
+
+    .verdict {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+      padding: 4px 12px; border-radius: 99px; margin-bottom: 10px;
+    }
+    .verdict.high { background: rgba(0,229,160,.1); border: 1px solid rgba(0,229,160,.3); color: var(--accent); }
+    .verdict.mid  { background: rgba(0,170,255,.1);  border: 1px solid rgba(0,170,255,.3);  color: var(--accent2); }
+    .verdict.low  { background: rgba(255,77,109,.1); border: 1px solid rgba(255,77,109,.3); color: var(--warn); }
+
+    #scoreHeading { font-family: var(--display); font-size: 20px; font-weight: 700; color: var(--heading); margin-bottom: 12px; }
+
+    .score-bar-wrap { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .score-bar { height: 100%; width: 0; border-radius: 3px; background: var(--accent); transition: width 1.2s cubic-bezier(.4,0,.2,1); }
+
+    /* Breakdown grid */
+    .breakdown {
+      margin-top: 16px; display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px;
+    }
+    .bd-item {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 14px; display: flex; flex-direction: column; gap: 4px;
+    }
+    .bd-label { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    .bd-val { font-size: 18px; font-weight: 700; font-family: var(--display); color: var(--heading); }
+    .bd-bar-wrap { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 2px; }
+    .bd-bar { height: 100%; border-radius: 2px; transition: width 1s ease; }
+
+    /* Panels */
+    .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+    @media (max-width: 620px) { .panels { grid-template-columns: 1fr; } }
+
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px 24px; animation: fadeUp .4s ease both; }
+    .panel-title { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+    .panel-title::before { content: ''; width: 3px; height: 14px; border-radius: 2px; }
+    .panel.keywords .panel-title::before { background: var(--warn); }
+    .panel.suggestions .panel-title::before { background: var(--accent); }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { background: rgba(255,77,109,.1); border: 1px solid rgba(255,77,109,.3); color: #ff8fa3; font-size: 12px; padding: 4px 12px; border-radius: 6px; font-family: var(--mono); letter-spacing: .04em; animation: popIn .3s ease both; }
+    .no-chips { color: var(--accent); font-size: 13px; }
+
+    .sug-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .sug-list li { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.5; animation: fadeUp .35s ease both; }
+    .sug-list li::before { content: '›'; color: var(--accent); font-size: 16px; line-height: 1.3; flex-shrink: 0; }
+
+    /* ── Animations ── */
+    @keyframes fadeDown { from { opacity:0; transform: translateY(-16px); } to { opacity:1; transform: none; } }
+    @keyframes fadeUp   { from { opacity:0; transform: translateY(16px);  } to { opacity:1; transform: none; } }
+    @keyframes popIn    { from { opacity:0; transform: scale(.85); } to { opacity:1; transform: scale(1); } }
+    @keyframes pulse    { 0%,100% { opacity:1; } 50% { opacity:.3; } }
+    @keyframes blink    { 0%,100% { opacity:1; } 50% { opacity:0; } }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed; bottom: 28px; left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #1a0a0e; border: 1px solid rgba(255,77,109,.5);
+      color: #ff8fa3; font-size: 13px; padding: 12px 24px;
+      border-radius: 8px; z-index: 1000; transition: transform .3s ease; white-space: nowrap;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ── Parser busy state ── */
+    .parse-btn.busy { opacity: .5; pointer-events: none; }
+
+    /* ── Upload Zone ── */
+    .upload-zone {
+      flex: 1; min-height: 220px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 8px; padding: 28px 20px;
+      cursor: pointer;
+      border: 2px dashed var(--border);
+      border-radius: 0 0 14px 14px;
+      transition: border-color .2s, background .2s;
+      background: transparent;
+      text-align: center;
+    }
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(0,229,160,.04);
+    }
+    .upload-zone.dragover { background: rgba(0,229,160,.08); }
+    .upload-zone.success  { border-color: var(--accent); border-style: solid; }
+    .upload-zone.error    { border-color: var(--warn);   border-style: solid; }
+
+    .upload-icon { color: var(--muted); transition: color .2s; }
+    .upload-zone:hover .upload-icon { color: var(--accent); }
+    .upload-zone.success .upload-icon { color: var(--accent); }
+
+    .upload-title { font-family: var(--display); font-size: 15px; font-weight: 700; color: var(--heading); }
+    .upload-sub   { font-size: 12px; color: var(--muted); }
+
+    .upload-status {
+      margin-top: 10px; font-size: 12px; letter-spacing: .04em;
+      display: none; align-items: center; gap: 8px;
+      padding: 7px 14px; border-radius: 6px;
+    }
+    .upload-status.visible   { display: flex; }
+    .upload-status.uploading { color: var(--accent2); background: rgba(0,170,255,.08); border: 1px solid rgba(0,170,255,.2); }
+    .upload-status.ok        { color: var(--accent);  background: rgba(0,229,160,.08); border: 1px solid rgba(0,229,160,.2); }
+    .upload-status.fail      { color: var(--warn);    background: rgba(255,77,109,.08); border: 1px solid rgba(255,77,109,.2); }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- Header -->
+  <header>
+    <div class="badge">AI-Powered · Resume Intelligence</div>
+    <h1>Resume<em>AI</em> · Match Analyzer</h1>
+    <p class="sub">Paste a raw job posting to extract requirements automatically, then match against your resume for an accurate skill-gap report.</p>
+  </header>
+
+  <!-- Step flow -->
+  <div class="flow">
+    <div class="flow-step active">
+      <div class="flow-num">1</div>
+      Paste raw job posting
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step active">
+      <div class="flow-num">2</div>
+      Extract requirements
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step active">
+      <div class="flow-num">3</div>
+      Add your resume
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step active">
+      <div class="flow-num">4</div>
+      Run analysis
+    </div>
+  </div>
+
+  <!-- 3-column main grid -->
+  <div class="main-grid">
+
+    <!-- COL 1: Raw JD Paste + Parser -->
+    <div class="col parser">
+      <div class="col-head">
+        <div class="col-label">
+          <div class="dot"></div>
+          <span>Raw Job Posting</span>
+        </div>
+        <button class="parse-btn" id="parseBtn" onclick="parseJD()">
+          <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
+          </svg>
+          Extract Requirements
+        </button>
+      </div>
+      <textarea id="rawJD" placeholder="Paste the full job posting here — marketing text, bullet points, everything.&#10;&#10;The parser will pull out only what matters: skills, technologies, experience requirements, education, and role type.&#10;&#10;Example:&#10;'Launch Your Future as a Graduate Software Engineer at Blackmagic Design…'"></textarea>
+
+      <!-- Extracted items appear here -->
+      <div class="extracted-panel" id="extractedPanel">
+        <div id="extractedSkills"></div>
+        <div id="extractedRole"></div>
+        <div id="extractedEdu"></div>
+        <button class="use-all-btn" onclick="useAllExtracted()">
+          <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+          </svg>
+          Auto-fill Job Description box →
+        </button>
+      </div>
+    </div>
+
+    <!-- Arrow -->
+    <div class="col-arrow">→</div>
+
+    <!-- COL 2: Cleaned Job Description -->
+    <div class="col jd-col">
+      <div class="col-head">
+        <div class="col-label">
+          <div class="dot"></div>
+          <span>Job Description</span>
+        </div>
+      </div>
+      <textarea id="job" placeholder="Extracted requirements will appear here automatically after parsing.&#10;&#10;You can also type or paste a clean description directly."></textarea>
+      <div class="fill-indicator" id="fillIndicator">✓ Auto-filled from extracted requirements</div>
+    </div>
+
+    <!-- COL 3: Resume -->
+    <div class="col resume-col">
+      <div class="col-head">
+        <div class="col-label">
+          <div class="dot"></div>
+          <span>Your Resume</span>
+        </div>
+        <button class="parse-btn" id="toggleModeBtn" onclick="toggleResumeMode()" style="background:rgba(0,229,160,.1);border-color:rgba(0,229,160,.3);color:var(--accent)">
+          <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487z"/>
+          </svg>
+          Paste instead
+        </button>
+      </div>
+
+      <!-- Upload zone (default view) -->
+      <div id="uploadZone" class="upload-zone"
+           onclick="document.getElementById('fileInput').click()"
+           ondragover="onDragOver(event)"
+           ondragleave="onDragLeave(event)"
+           ondrop="onDrop(event)">
+        <input type="file" id="fileInput" accept=".pdf,.docx" style="display:none" onchange="onFileSelected(event)">
+        <div class="upload-icon">
+          <svg width="36" height="36" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.3">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12l-3-3m0 0l-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+          </svg>
+        </div>
+        <div class="upload-title">Drop your resume here</div>
+        <div class="upload-sub">PDF or DOCX &middot; up to 5 MB</div>
+        <div class="upload-sub" style="margin-top:6px;color:var(--accent);font-size:11px">or click to browse</div>
+        <div id="uploadStatus" class="upload-status"></div>
+      </div>
+
+      <!-- Paste zone (hidden by default) -->
+      <textarea id="resume" style="display:none;flex:1;min-height:220px"
+        placeholder="Paste your full resume text here."></textarea>
+    </div>
+
+  </div><!-- /main-grid -->
+
+  <!-- Analyze button -->
+  <div class="btn-row">
+    <button class="analyze-btn" id="analyzeBtn" onclick="analyze()">
+      <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714a2.25 2.25 0 001.5 2.25m-1.5-7.964c.251.023.501.05.75.082M19.5 9l-1.5 1.5M3 9l1.5 1.5" />
+      </svg>
+      Run Analysis
+    </button>
+  </div>
+
+  <!-- Loader -->
+  <div id="loader">
+    <div class="dots">Analyzing your profile<span>.</span><span>.</span><span>.</span></div>
+  </div>
+
+  <!-- Output -->
+  <div id="output">
+    <div class="score-card">
+      <div class="score-dial">
+        <svg viewBox="0 0 120 120">
+          <circle class="dial-bg"   cx="60" cy="60" r="50"/>
+          <circle class="dial-fill" id="dialFill" cx="60" cy="60" r="50"/>
+        </svg>
+        <div class="score-num">
+          <strong id="scoreVal">0%</strong>
+          <small>MATCH</small>
+        </div>
+      </div>
+      <div class="score-meta">
+        <div class="verdict" id="verdictBadge">—</div>
+        <h2 id="scoreHeading">—</h2>
+        <div class="score-bar-wrap">
+          <div class="score-bar" id="scoreBar"></div>
+        </div>
+        <!-- Score breakdown -->
+        <div class="breakdown" id="breakdown"></div>
+      </div>
+    </div>
+
+    <div class="panels">
+      <div class="panel keywords">
+        <div class="panel-title">Missing Skills</div>
+        <div class="chips" id="keywords"></div>
+      </div>
+      <div class="panel suggestions">
+        <div class="panel-title">Recommendations</div>
+        <ul class="sug-list" id="suggestions"></ul>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let extractedItems = { skills: [], roles: [], edu: [], soft: [], experience: null };
+
+const PARSE_BTN_DEFAULT = `<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg> Extract Requirements`;
+const PARSE_BTN_BUSY    = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v3m0 12v3M3 12h3m12 0h3"/></svg> Parsing…`;
+
+// ── Parse JD — calls jd_parser.py via /parse_jd ───────────────────────────
+async function parseJD() {
+  const raw = document.getElementById('rawJD').value.trim();
+  if (!raw) { showToast('Paste a job posting first.'); return; }
+
+  const btn = document.getElementById('parseBtn');
+  btn.classList.add('busy');
+  btn.innerHTML = PARSE_BTN_BUSY;
+
+  try {
+    const res  = await fetch('/parse_jd', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ raw_jd: raw })
+    });
+    const data = await res.json();
+
+    if (!res.ok) { showToast(data.error || 'Parser error.'); return; }
+
+    // Map backend response keys to local state
+    extractedItems = {
+      skills:     data.tech_skills    || [],
+      roles:      data.role_keywords  || [],
+      edu:        data.edu_keywords   || [],
+      soft:       data.soft_skills    || [],
+      experience: data.experience     ?? null,
+    };
+
+    // ── Auto-fill the JD box immediately ──────────────────────────────────
+    autoFillJD();
+
+    renderExtracted(
+      extractedItems.skills,
+      extractedItems.roles,
+      extractedItems.edu,
+      extractedItems.soft,
+      extractedItems.experience
+    );
+  } catch (e) {
+    showToast('Network error — is the server running?');
+  } finally {
+    btn.classList.remove('busy');
+    btn.innerHTML = PARSE_BTN_DEFAULT;
+  }
+}
+
+function renderExtracted(skills, roles, edu, soft, exp) {
+  const panel = document.getElementById('extractedPanel');
+
+  // Tech skills
+  const skillsDiv = document.getElementById('extractedSkills');
+  skillsDiv.innerHTML = skills.length
+    ? `<div class="ext-section-title">⬡ Tech Skills (${skills.length} found)</div>
+       <div class="ext-chips">${skills.map(s =>
+         `<span class="ext-chip skill-chip" title="Click to toggle" onclick="toggleChip(this,'${s}')">${s}</span>`
+       ).join('')}</div>`
+    : `<div class="ext-section-title" style="color:var(--muted)">No tech skills detected</div>`;
+
+  // Role / level + experience
+  const roleDiv = document.getElementById('extractedRole');
+  if (roles.length || exp) {
+    const expChip = exp
+      ? `<span class="ext-chip role-chip" onclick="toggleChip(this,'${exp}+ years experience')">${exp}+ yrs exp</span>`
+      : '';
+    roleDiv.innerHTML = `
+      <div class="ext-section-title" style="margin-top:8px">◈ Role / Level</div>
+      <div class="ext-chips">
+        ${roles.map(r => `<span class="ext-chip role-chip" onclick="toggleChip(this,'${r}')">${r}</span>`).join('')}
+        ${expChip}
+      </div>`;
+  } else {
+    roleDiv.innerHTML = '';
+  }
+
+  // Education
+  const eduDiv = document.getElementById('extractedEdu');
+  let eduHTML = '';
+  if (edu.length) {
+    eduHTML += `<div class="ext-section-title" style="margin-top:8px">◉ Education</div>
+      <div class="ext-chips">${edu.map(e =>
+        `<span class="ext-chip edu-chip" onclick="toggleChip(this,'${e}')">${e}</span>`
+      ).join('')}</div>`;
+  }
+  if (soft && soft.length) {
+    eduHTML += `<div class="ext-section-title" style="margin-top:8px">◎ Soft Skills</div>
+      <div class="ext-chips">${soft.map(s =>
+        `<span class="ext-chip edu-chip" style="background:rgba(0,229,160,.07);border-color:rgba(0,229,160,.2);color:#6ee7b7" onclick="toggleChip(this,'${s}')">${s}</span>`
+      ).join('')}</div>`;
+  }
+  eduDiv.innerHTML = eduHTML;
+
+  panel.classList.add('visible');
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// Toggle individual chip into JD box
+function toggleChip(el, value) {
+  const jdBox = document.getElementById('job');
+  const current = jdBox.value;
+
+  if (el.style.opacity === '0.4') {
+    // Remove from JD box
+    jdBox.value = current.replace(new RegExp('\\b' + value + '\\b,?\\s?', 'gi'), '').trim();
+    el.style.opacity = '';
+    el.style.textDecoration = '';
+  } else {
+    // Add to JD box
+    jdBox.value = (current ? current + ', ' : '') + value;
+    el.style.opacity = '0.4';
+    el.style.textDecoration = 'line-through';
+    flashFill();
+  }
+}
+
+// ── Build and write the cleaned JD text into the job box ─────────────────
+function autoFillJD() {
+  const { skills, roles, edu, soft, experience } = extractedItems;
+  const parts = [];
+
+  if (roles.length)        parts.push('Role: '            + roles.join(', '));
+  if (skills.length)       parts.push('Required skills: ' + skills.join(', '));
+  if (soft && soft.length) parts.push('Soft skills: '     + soft.join(', '));
+  if (edu.length)          parts.push('Education: '       + edu.join(', '));
+  if (experience != null)  parts.push('Experience: '      + experience + '+ years');
+
+  if (!parts.length) return;
+
+  document.getElementById('job').value = parts.join('\n');
+  flashFill();
+}
+
+// Auto-fill all extracted items into the JD box
+function useAllExtracted() {
+  const { skills, roles, edu } = extractedItems;
+  if (!skills.length && !roles.length && !edu.length) {
+    showToast('Nothing extracted yet — click Extract Requirements first.');
+    return;
+  }
+  autoFillJD();
+
+  // Mark all chips as used
+  document.querySelectorAll('.ext-chip').forEach(c => {
+    c.style.opacity = '0.4';
+    c.style.textDecoration = 'line-through';
+  });
+
+  flashFill();
+}
+
+function flashFill() {
+  const ind = document.getElementById('fillIndicator');
+  ind.classList.add('visible');
+  document.getElementById('job').style.borderColor = 'rgba(0,170,255,.5)';
+  setTimeout(() => {
+    document.getElementById('job').style.borderColor = '';
+  }, 1200);
+}
+
+// ── Analyze ──
+async function analyze() {
+  const resume = document.getElementById('resume').value.trim();
+  const job    = document.getElementById('job').value.trim();
+  const btn    = document.getElementById('analyzeBtn');
+
+  if (!resume) { showToast('Please add your resume.'); return; }
+  if (!job)    { showToast('Please add or extract a job description.'); return; }
+
+  btn.disabled = true;
+  document.getElementById('loader').style.display = 'block';
+  document.getElementById('output').style.display = 'none';
+
+  try {
+    const res = await fetch('/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resume, job_desc: job })
+    });
+
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Server error.'); return; }
+    renderResults(data);
+  } catch (e) {
+    showToast('Network error — is the server running?');
+  } finally {
+    btn.disabled = false;
+    document.getElementById('loader').style.display = 'none';
+  }
+}
+
+// ── Render results ──
+function renderResults({ score, match_label, missing_keywords, suggestions, breakdown }) {
+  const circ = 314;
+  const fill = (score / 100) * circ;
+  requestAnimationFrame(() => {
+    document.getElementById('dialFill').style.strokeDasharray = `${fill} ${circ}`;
+  });
+
+  const dialEl = document.getElementById('dialFill');
+  dialEl.style.stroke = score >= 75 ? 'var(--accent)' : score >= 50 ? 'var(--accent2)' : 'var(--warn)';
+
+  // Animated counter
+  const scoreEl = document.getElementById('scoreVal');
+  const dur = 1200, t0 = performance.now();
+  (function tick(now) {
+    const p = Math.min((now - t0) / dur, 1);
+    const e = 1 - Math.pow(1 - p, 3);
+    scoreEl.textContent = Math.round(e * score) + '%';
+    if (p < 1) requestAnimationFrame(tick);
+  })(performance.now());
+
+  setTimeout(() => { document.getElementById('scoreBar').style.width = score + '%'; }, 50);
+
+  // Verdict
+  const vb = document.getElementById('verdictBadge');
+  const heading = document.getElementById('scoreHeading');
+  const label = match_label || (score >= 75 ? 'Strong Match' : score >= 55 ? 'Good Match' : score >= 35 ? 'Partial Match' : 'Weak Match');
+
+  const verdictMap = {
+    'Strong Match': ['high', '● Strong Match', 'Your profile aligns very well.'],
+    'Good Match':   ['mid',  '◑ Good Match',   'A few additions could close the gap.'],
+    'Partial Match':['mid',  '◑ Partial Match', 'Address the skill gaps to become competitive.'],
+    'Weak Match':   ['low',  '○ Weak Match',    'Significant skill gaps detected.'],
+  };
+  const [cls, text, sub] = verdictMap[label] || verdictMap['Weak Match'];
+  vb.textContent = text;
+  vb.className = `verdict ${cls}`;
+  heading.textContent = sub;
+
+  // Breakdown bars
+  if (breakdown) {
+    const bdEl = document.getElementById('breakdown');
+    const items = [
+      { label: 'Tech Skills',  val: breakdown.tech_skill_score,  color: 'var(--accent)' },
+      { label: 'Context',      val: breakdown.tfidf_similarity,  color: 'var(--accent2)' },
+      { label: 'Soft Skills',  val: breakdown.soft_skill_score,  color: 'var(--accent3)' },
+      { label: 'Role Fit',     val: breakdown.role_level_score,  color: '#fbbf24' },
+      { label: 'Education',    val: breakdown.education_score,   color: '#34d399' },
+    ];
+    bdEl.innerHTML = items.map(it => `
+      <div class="bd-item">
+        <div class="bd-label">${it.label}</div>
+        <div class="bd-val">${it.val}%</div>
+        <div class="bd-bar-wrap"><div class="bd-bar" style="width:0%; background:${it.color}" data-w="${it.val}"></div></div>
+      </div>`).join('');
+    // Animate bars after render
+    setTimeout(() => {
+      bdEl.querySelectorAll('.bd-bar').forEach(b => {
+        b.style.width = b.dataset.w + '%';
+      });
+    }, 80);
+  }
+
+  // Missing keywords
+  const chipWrap = document.getElementById('keywords');
+  chipWrap.innerHTML = '';
+  if (!missing_keywords || missing_keywords.length === 0) {
+    chipWrap.innerHTML = '<span class="no-chips">✓ No critical gaps found</span>';
+  } else {
+    missing_keywords.forEach((kw, i) => {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.textContent = kw;
+      chip.style.animationDelay = `${i * 0.06}s`;
+      chipWrap.appendChild(chip);
+    });
+  }
+
+  // Suggestions
+  const sugList = document.getElementById('suggestions');
+  sugList.innerHTML = '';
+  (suggestions || []).forEach((s, i) => {
+    const li = document.createElement('li');
+    li.textContent = s;
+    li.style.animationDelay = `${i * 0.08}s`;
+    sugList.appendChild(li);
+  });
+
+  document.getElementById('output').style.display = 'block';
+  document.getElementById('output').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── Toast ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ── Resume upload / paste toggle ─────────────────────────────────────────
+let resumeMode = 'upload';   // 'upload' | 'paste'
+
+function toggleResumeMode() {
+  const zone    = document.getElementById('uploadZone');
+  const textarea = document.getElementById('resume');
+  const btn     = document.getElementById('toggleModeBtn');
+
+  if (resumeMode === 'upload') {
+    resumeMode = 'paste';
+    zone.style.display    = 'none';
+    textarea.style.display = 'flex';
+    textarea.style.flex   = '1';
+    btn.innerHTML = `<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12l-3-3m0 0l-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg> Upload instead`;
+  } else {
+    resumeMode = 'upload';
+    zone.style.display     = 'flex';
+    textarea.style.display = 'none';
+    btn.innerHTML = `<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487z"/></svg> Paste instead`;
+  }
+}
+
+// ── Drag & drop handlers ─────────────────────────────────────────────────
+function onDragOver(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.add('dragover');
+}
+function onDragLeave(e) {
+  document.getElementById('uploadZone').classList.remove('dragover');
+}
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+function onFileSelected(e) {
+  const file = e.target.files[0];
+  if (file) processFile(file);
+  // Reset input so same file can be re-uploaded
+  e.target.value = '';
+}
+
+// ── Upload file to /upload_resume ────────────────────────────────────────
+async function processFile(file) {
+  const zone   = document.getElementById('uploadZone');
+  const status = document.getElementById('uploadStatus');
+
+  const allowed = ['.pdf', '.docx'];
+  const ext     = '.' + file.name.split('.').pop().toLowerCase();
+  if (!allowed.includes(ext)) {
+    setUploadStatus('fail', `✗ Unsupported format: ${ext}. Use PDF or DOCX.`);
+    zone.classList.add('error');
+    return;
+  }
+
+  // Show uploading state
+  zone.classList.remove('success', 'error');
+  setUploadStatus('uploading', `↑ Uploading ${file.name}…`);
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const res  = await fetch('/upload_resume', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    if (!res.ok) {
+      setUploadStatus('fail', `✗ ${data.error || 'Upload failed.'}`);
+      zone.classList.add('error');
+      return;
+    }
+
+    // Success — put extracted text into hidden textarea
+    document.getElementById('resume').value = data.text;
+
+    // Update upload zone to show success state
+    zone.classList.add('success');
+    zone.querySelector('.upload-title').textContent = '✓ ' + data.filename;
+    zone.querySelector('.upload-sub').textContent   = `${(data.char_count / 1000).toFixed(1)}k characters extracted`;
+    setUploadStatus('ok', `✓ Ready — ${data.char_count.toLocaleString()} chars extracted`);
+
+  } catch (e) {
+    setUploadStatus('fail', '✗ Network error — is the server running?');
+    zone.classList.add('error');
+  }
+}
+
+function setUploadStatus(type, msg) {
+  const el = document.getElementById('uploadStatus');
+  el.className = `upload-status visible ${type}`;
+  el.textContent = msg;
+}
+</script>
+
+</body>
+</html>
