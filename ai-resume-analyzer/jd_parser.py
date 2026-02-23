@@ -151,8 +151,26 @@ def _tokenize(text: str) -> set:
 
 
 def _extract_experience(text: str):
-    matches = re.findall(r'(\d+)\s*\+?\s*years?', text, re.IGNORECASE)
-    return max((int(m) for m in matches), default=None) if matches else None
+    """Only extract experience years from requirement-related lines, not company history."""
+    lines = text.lower().split("\n")
+    REQUIREMENT_SIGNALS = {
+        "require", "minimum", "at least", "must have", "you have",
+        "years experience", "years of experience", "proven experience",
+        "ideally", "preferred", "looking for", "we need", "seeking",
+    }
+    results = []
+    for line in lines:
+        if any(skip in line for skip in [
+            "founded", "over 30 years", "30+ years", "25 years", "20 years",
+            "company", "our history", "we have been", "in business",
+            "clients", "careers launched", "global", "ftse", "centres",
+        ]):
+            continue
+        has_signal = any(signal in line for signal in REQUIREMENT_SIGNALS)
+        matches = re.findall(r"(\d+)\s*\+?\s*years?", line)
+        if matches and has_signal:
+            results.extend(int(m) for m in matches)
+    return max(results, default=None) if results else None
 
 
 def _detect_field(skills: list) -> str:
@@ -186,14 +204,13 @@ def _build_cleaned_text(field, hard_skills, soft_skills, edu, roles, experience,
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _parse_with_gemini(raw_text: str) -> dict:
-    import google.generativeai as genai
+    from google import genai
 
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise EnvironmentError("GEMINI_API_KEY not set")
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    client = genai.Client(api_key=api_key)
 
     prompt = f"""You are an expert job description parser for ALL industries worldwide.
 
@@ -220,10 +237,13 @@ Important rules:
 Job description to parse:
 {raw_text}"""
 
-    response  = model.generate_content(prompt)
+    response  = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=prompt
+    )
     raw_json  = response.text.strip()
-    raw_json  = re.sub(r'^```(?:json)?\s*', '', raw_json, flags=re.MULTILINE)
-    raw_json  = re.sub(r'\s*```\s*$',       '', raw_json, flags=re.MULTILINE)
+    raw_json  = re.sub(r"^```(?:json)?\s*", "", raw_json, flags=re.MULTILINE)
+    raw_json  = re.sub(r"\s*```\s*$",       "", raw_json, flags=re.MULTILINE)
     return json.loads(raw_json.strip())
 
 

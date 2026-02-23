@@ -15,19 +15,11 @@ from jd_parser import parse_job_description
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB
 
-# ── Semantic model (optional, graceful fallback) ───────────────────────────
+# ── Semantic model removed — using TF-IDF only for stability ──────────────
 _semantic_model = None
 
 def _load_semantic_model():
-    global _semantic_model
-    if _semantic_model is None:
-        try:
-            from sentence_transformers import SentenceTransformer
-            _semantic_model = SentenceTransformer('all-MiniLM-L6-v2')
-            print("[app] ✓ Semantic model loaded")
-        except Exception as e:
-            print(f"[app] sentence-transformers not available: {e}")
-    return _semantic_model
+    return None   # sentence-transformers disabled due to tokenizers conflict
 
 # ─────────────────────────────────────────────────────────────────────────────
 # UNIVERSAL SKILL DICTIONARIES
@@ -186,8 +178,33 @@ def tokenize(text: str) -> set:
 
 
 def extract_experience(text: str) -> int:
-    matches = re.findall(r'(\d+)\s*\+?\s*years?', text, re.IGNORECASE)
-    return max((int(m) for m in matches), default=0)
+    """
+    Only extract years of experience when it appears near requirement keywords.
+    Avoids pulling company history (e.g. "30+ years of experience") as a job requirement.
+    """
+    lines = text.lower().split("\n")
+    REQUIREMENT_SIGNALS = {
+        "require", "minimum", "at least", "must have", "you have",
+        "experience required", "years experience", "years of experience",
+        "proven experience", "demonstrable", "ideally", "preferred",
+        "looking for", "we need", "seeking", "qualifications",
+    }
+    results = []
+    for line in lines:
+        # Skip lines that are clearly about the company, not the candidate
+        if any(skip in line for skip in [
+            "founded", "over 30 years", "30+ years", "25 years", "20 years",
+            "company", "our history", "we have been", "in business", "centres",
+            "clients", "careers launched", "global", "ftse", "listed",
+        ]):
+            continue
+        # Only extract if line contains a requirement signal
+        has_signal = any(signal in line for signal in REQUIREMENT_SIGNALS)
+        matches = re.findall(r"(\d+)\s*\+?\s*years?", line)
+        if matches and has_signal:
+            results.extend(int(m) for m in matches)
+
+    return max(results, default=0)
 
 
 def tfidf_score(text_a: str, text_b: str) -> float:
